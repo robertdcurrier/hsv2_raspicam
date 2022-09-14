@@ -1,0 +1,6 @@
+vim
+gpac
+fbi
+python3-dialog
+sqlite3
+ssh-pass

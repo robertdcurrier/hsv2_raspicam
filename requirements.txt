@@ -1,0 +1,4 @@
+paramiko
+scp
+getkey
+pyinstaller
