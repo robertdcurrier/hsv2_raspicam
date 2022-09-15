@@ -278,6 +278,36 @@ def advanced_config_menu():
             if c_tag == 'Camera':
                 camera_settings()
 
+def change_taxa():
+    """
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-15
+    Modified:   2022-09-15
+    Notes:      Went with separate change_taxa menu
+    """
+
+    code, resp = d.menu("Select Taxa", 12, 40, 4,
+    choices=[("Karenia brevis", ""),
+            ("Pyrodinium bahamense", ""),
+            ("Alexandrium catenella", ""),
+            ("Alexandrium monilatum", "")])
+    if code == d.CANCEL:
+        d.msgbox("Cancelled Taxa Change", 10, 50)
+    if code == d.OK:
+        if resp == 'Alexandrium catenella':
+            resp = 'alexandriumCatenella'
+        if resp == 'Alexandrium monilatum':
+            resp = 'alexandriumMonilatum'
+        if resp == 'Karenia brevis':
+            resp = 'kareniaBrevis'
+        if resp == 'Pyrodinium bahamense':
+            resp = 'pyrodiniumBahamense'
+
+        update_db("configuration", "taxa", resp)
+        msg = "Taxa changed to %s" % (resp)
+        logging.info(msg)
+        d.msgbox(msg, 10, 40)
+        return
 
 
 def basic_config_menu():
@@ -340,31 +370,7 @@ def basic_config_menu():
                     config_menu()
 
             if c_tag == 'Taxa':
-                code, resp = d.menu("Select Taxa", 12, 40, 4,
-                    choices=[("Karenia brevis", ""),
-                             ("Pyrodinium bahamense", ""),
-                             ("Alexandrium catenella", ""),
-                             ("Alexandrium monilatum", "")])
-                if code == d.CANCEL:
-                    d.msgbox("Cancelled Taxa Change", 10, 50)
-                if code == d.OK:
-                    # 2022-07-13 robertdcurrier@gmail.com
-                    # Need to rename to single string naming convention
-                    # We will eventually want to have a table in config.db
-                    # with Menu name to internal name mappings...
-                    if resp == 'Alexandrium catenella':
-                        resp = 'alexandriumCatenella'
-                    if resp == 'Alexandrium monilatum':
-                        resp = 'alexandriumMonilatum'
-                    if resp == 'Karenia brevis':
-                        resp = 'kareniaBrevis'
-                    if resp == 'Pyrodinium bahamense':
-                        resp = 'pyrodiniumBahamense'
-
-                    update_db("configuration", "taxa", resp)
-                    msg = "Taxa changed to %s" % (resp)
-                    logging.info(msg)
-                    d.msgbox(msg, 10, 40)
+                change_taxa()
 
             if c_tag == 'System Update':
                 code  = d.yesno("About to Update System! Are you SURE?", 10, 50)
@@ -462,6 +468,7 @@ def check_serial():
                 msg = "Serial Number changed to %s" % (resp)
                 logging.info(msg)
                 d.msgbox(msg, 10, 50)
+                change_taxa()
             else:
                 msg = """ Invalid Serial Number! """
                 d.msgbox(msg, 10, 40)
