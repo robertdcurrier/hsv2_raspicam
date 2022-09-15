@@ -86,12 +86,8 @@ def main_menu():
 
     while True:
         # Main menu
-        if level == 'Volunteer':
-            title = ("Serial: %s Version: %s Taxa: %s Internet: %s" %
-                    (serial, version, menu_taxa, INET_STATUS))
-        else:
-            title = ("%s %s %s %s %s" %
-                     (serial, version, mode, menu_taxa, INET_STATUS))
+        title = ("Serial: %s Version: %s Taxa: %s Internet: %s" %
+                 (serial, version, menu_taxa, INET_STATUS))
 
 
         d.set_background_title(title)
@@ -112,48 +108,54 @@ def main_menu():
             os.system('clear')
             sys.exit()
 
+
 def config_menu():
     """
-    Name: config_menu
-    Author: robertdcurrier@gmail.com
-    Created: 2021-07-05
-    Modified: 2022-01-21
-    Notes: Migrated from text config file. Now using sqlite3
-    for all configuration management.  This will be long so we
-    can keep all together so will not pass lint. Oh darn. :-)
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-15
+    Modified:   2022-09-15
+    Notes:      Went with seperate Basic and Advanced config menus
+    """
+    code, tag = d.menu("Select an Option", 12, 35, 4,
+                        choices=[("Basic", ""),
+                                ("Advanced", "")])
+    if tag == 'Basic':
+        basic_config_menu()
+    elif tag == 'Advanced':
+        code, pw = d.passwordbox('Enter Password',insecure=True)
+        auth = auth_user(pw)
+        if auth:
+            logging.info("Advanced Configuration Selected")
+            advanced_config_menu()
+        else:
+            d.msgbox("Incorrect Password!")
+            logging.info("Configuration Menu Password Failure")
+            config_menu()
+    if code == d.CANCEL:
+        main_menu()
+
+
+def advanced_config_menu():
+    """
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-15
+    Modified:   2022-09-15
+    Notes:      Went with seperate Basic and Advanced config menus
     """
     global d
     config = get_sql_config('configuration')
-    level = config['level']
-    if level == 'Professional':
-        # full menu for pro users
-        choices = [
-                    ("Serial", ""),
-                    ("Server", ""),
-                    ("Mode", ""),
-                    ("User Level", ""),
-                    ("Fixed/Live", ""),
-                    ("Taxa", ""),
-                    ("Camera", ""),
-                    ("Recording Time", ""),
-                    ("Configuration Password", ""),
-                    ("System Password", ""),
-                    ("Server Credentials", ""),
-                    ("System Update", ""),
-                    ("Exit Configuration", "")]
-        m_height = 22
-        m_title = "%s Configuration Menu" % level.capitalize()
-
-    # reduced menu for volunteers
-    if level == 'Volunteer':
-         choices = [
-                    ("Serial", ""),
-                    ("User Level", ""),
-                    ("System Update", ""),
-                    ("Exit Configuration", "")]
-         m_height = 12
-         m_title = "%s Configuration Menu" % level.capitalize()
-
+    choices = [
+                ("Server", ""),
+                ("Fixed/Live", ""),
+                ("Camera", ""),
+                ("Recording Time", ""),
+                ("Configuration Password", ""),
+                ("System Password", ""),
+                ("Server Credentials", ""),
+                ("System Update", ""),
+                ("Exit Configuration", "")]
+    m_height = 18
+    m_title = "Advanced Configuration"
     m_width = 40
     m_rows = len(choices)+1
     while True:
@@ -179,40 +181,6 @@ def config_menu():
                     logging.info(msg)
                     d.msgbox(msg, 10, 50)
 
-            if c_tag == 'Serial':
-                msg = "Enter Serial Number"
-                code, resp = d.inputbox(msg, 10, 50)
-                if code == d.CANCEL:
-                    d.msgbox("Cancelled Changing Serial Number", 10, 50)
-                if code == d.OK:
-                    is_good = validate_serial(resp)
-                    if is_good:
-                        update_db("configuration", "serial", resp)
-                        msg = "Serial Number changed to %s" % (resp)
-                        logging.info(msg)
-                        d.msgbox(msg, 10, 50)
-                    else:
-                        msg = """ Invalid Serial Number! """
-                        d.msgbox(msg, 10, 40)
-            if c_tag == 'User Level':
-                logging.info("Attempting to change user level")
-                if level == 'Volunteer':
-                    code, pw = d.passwordbox('Enter Password',insecure=True)
-                    auth = auth_user(pw)
-                    if auth:
-                        logging.info("User Level change Password Succeeded")
-                    else:
-                        d.msgbox("Incorrect Password!")
-                        logging.info("Configuration Menu Password Failure")
-                        config_menu()
-                code, resp = d.menu("Select Type", 12, 40, 5,
-                    choices=[("Volunteer", ""),
-                            ("Professional", "")])
-                if code == d.CANCEL:
-                    d.msgbox("Cancelled User Level", 10, 50)
-                if code == d.OK:
-                    update_db("configuration", "level", resp)
-
             if c_tag == 'Recording Time':
                 msg = "Recording Length in Seconds"
                 code, resp = d.inputbox(msg, 10, 50)
@@ -231,27 +199,12 @@ def config_menu():
                 if code == d.OK:
                     update_db("configuration", "sample_type", resp)
 
-            if c_tag == 'Mode':
-                code, resp = d.menu("Select Mode", 12, 40, 5,
-                       choices=[("Normal", ""),
-                                ("Calibration", ""),
-                                ("Training", ""),
-                                ("Survey","")])
-                if code == d.CANCEL:
-                    d.msgbox("Cancelled Mode Change", 10, 50)
-                if code == d.OK:
-                    update_db("configuration", "mode", resp)
-                    msg = "Mode changed to %s" % (resp)
-                    logging.info(msg)
-                    d.msgbox(msg, 10, 40)
-
             if c_tag == 'Taxa':
                 code, resp = d.menu("Select Taxa", 12, 40, 4,
                     choices=[("Karenia brevis", ""),
                              ("Pyrodinium bahamense", ""),
                              ("Alexandrium catenella", ""),
-                             ("Alexandrium monilatum", ""),
-                             ("Detritus", "")])
+                             ("Alexandrium monilatum", "")])
                 if code == d.CANCEL:
                     d.msgbox("Cancelled Taxa Change", 10, 50)
                 if code == d.OK:
@@ -324,6 +277,121 @@ def config_menu():
 
             if c_tag == 'Camera':
                 camera_settings()
+
+
+
+def basic_config_menu():
+    """
+    Name: basic_config_menu
+    Author: robertdcurrier@gmail.com
+    Created: 2021-07-05
+    Modified: 2022-09-15
+    Notes: Migrated from text config file. Now using sqlite3
+    for all configuration management.  This will be long so we
+    can keep all together so will not pass lint. Oh darn. :-)
+    """
+    global d
+    m_title = "Basic Configuration"
+    choices = [
+                ("Serial", ""),
+                ("Taxa", ""),
+                ("System Update", ""),
+                ("Exit Configuration", "")]
+    m_height = 12
+    m_title = "Basic Configuration"
+
+    m_width = 40
+    m_rows = len(choices)+1
+    while True:
+        c_code, c_tag = d.menu(m_title, m_height, m_width, m_rows,
+            choices=choices)
+
+        # Bail here
+        if c_code == d.CANCEL:
+            return
+        if c_code == d.OK:
+            if c_tag == 'Exit Configuration':
+                # Have to call main_menu so we update title bar
+                main_menu()
+
+            if c_tag == 'Serial':
+                msg = "Enter Serial Number"
+                code, resp = d.inputbox(msg, 10, 50)
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled Changing Serial Number", 10, 50)
+                if code == d.OK:
+                    is_good = validate_serial(resp)
+                    if is_good:
+                        update_db("configuration", "serial", resp)
+                        msg = "Serial Number changed to %s" % (resp)
+                        logging.info(msg)
+                        d.msgbox(msg, 10, 50)
+                    else:
+                        msg = """ Invalid Serial Number! """
+                        d.msgbox(msg, 10, 40)
+            if c_tag == 'Advanced Settings':
+                code, pw = d.passwordbox('Enter Password',insecure=True)
+                auth = auth_user(pw)
+                if auth:
+                    logging.info("User Level change Password Succeeded")
+                else:
+                    d.msgbox("Incorrect Password!")
+                    logging.info("Setup Menu Password Failure")
+                    config_menu()
+
+            if c_tag == 'Taxa':
+                code, resp = d.menu("Select Taxa", 12, 40, 4,
+                    choices=[("Karenia brevis", ""),
+                             ("Pyrodinium bahamense", ""),
+                             ("Alexandrium catenella", ""),
+                             ("Alexandrium monilatum", "")])
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled Taxa Change", 10, 50)
+                if code == d.OK:
+                    # 2022-07-13 robertdcurrier@gmail.com
+                    # Need to rename to single string naming convention
+                    # We will eventually want to have a table in config.db
+                    # with Menu name to internal name mappings...
+                    if resp == 'Alexandrium catenella':
+                        resp = 'alexandriumCatenella'
+                    if resp == 'Alexandrium monilatum':
+                        resp = 'alexandriumMonilatum'
+                    if resp == 'Karenia brevis':
+                        resp = 'kareniaBrevis'
+                    if resp == 'Pyrodinium bahamense':
+                        resp = 'pyrodiniumBahamense'
+
+                    update_db("configuration", "taxa", resp)
+                    msg = "Taxa changed to %s" % (resp)
+                    logging.info(msg)
+                    d.msgbox(msg, 10, 40)
+
+            if c_tag == 'System Update':
+                code  = d.yesno("About to Update System! Are you SURE?", 10, 50)
+                if code == d.OK:
+                    results = system_update()
+                    if results:
+                        msg = "System Updated. Unit will reboot."
+                        logging.info(msg)
+                        d.msgbox(msg, 10, 50)
+                        config = get_sql_config('configuration')
+                        command = config["apt_get"]
+                        msg="system_update(): Applying %s" % command
+                        logging.info(msg)
+                        os.system(command)
+                        os.system("sudo reboot")
+                    else:
+                        msg = "System Update Failed"
+                        logging.info(msg)
+                        d.msgbox(msg, 10, 50)
+                        return
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled System Update", 10, 50)
+
+                else:
+                    msg = "System Update Cancelled"
+                    logging.info(msg)
+                    d.msgbox("msg", 10, 50)
 
 
 def camera_settings():
@@ -449,29 +517,11 @@ def mp4_pack():
     epoch = int(time.time())
 
 
-    # Need to check mode and build infile and outfile to match
-    if mode == 'calibration':
-        cpl = get_cpl()
-        msg = 'mp4_pack(): Got cpl of %s' % cpl
-        logging.info(msg)
-        outfile = ('/data/videos/calibrations/%s_%s_%s_%d_cal.mp4' %
-                   (serial, taxa, cpl, epoch))
-    if mode == 'training':
-        outfile = ('/data/videos/training/%s_%s_%d_training.mp4' %
-                   (serial, taxa, epoch))
-    if mode == 'survey':
-        (lat, lon, site) = lat_lon_menu()
-        outfile = ('/data/videos/surveys/%s_%d_%08.4f_%09.4f_raw.mp4' %
-                   (serial, epoch, lat, lon))
-
-    if mode == 'normal':
-        #(lat, lon, site) = lat_lon_menu()
-        #outfile = ('/data/videos/raw/%s_%s_%d_%08.4f_%09.4f_raw.mp4' %
-        #           (serial, taxa, epoch, lat, lon))
-        (lat, lon, site) = lat_lon_menu()
-        site = site.replace(' ','-')
-        outfile = ("/data/videos/raw/%s_%s_%d_%08.4f_%09.4f_%s_raw.mp4" %
-                   (serial, taxa, epoch, lat, lon, site))
+    # 2022-09-15 dropped modes as just too much of a PITA
+    (lat, lon, site) = lat_lon_menu()
+    site = site.replace(' ','-')
+    outfile = ("/data/videos/raw/%s_%s_%d_%08.4f_%09.4f_%s_raw.mp4" %
+                (serial, taxa, epoch, lat, lon, site))
 
     c1 = "MP4Box -add /data/videos/raw/habscope_raw.h264:fps=%d " % (fps)
     c2 = "%s > /dev/null 2>&1 &" % (outfile)

@@ -1,0 +1,202 @@
+def config_menu():
+    """
+    Name: config_menu
+    Author: robertdcurrier@gmail.com
+    Created: 2021-07-05
+    Modified: 2022-01-21
+    Notes: Migrated from text config file. Now using sqlite3
+    for all configuration management.  This will be long so we
+    can keep all together so will not pass lint. Oh darn. :-)
+    """
+    global d
+    config = get_sql_config('configuration')
+    level = config['level']
+    if level == 'Professional':
+        # full menu for pro users
+        choices = [
+                    ("Serial", ""),
+                    ("Server", ""),
+                    ("Mode", ""),
+                    ("User Level", ""),
+                    ("Fixed/Live", ""),
+                    ("Taxa", ""),
+                    ("Camera", ""),
+                    ("Recording Time", ""),
+                    ("Configuration Password", ""),
+                    ("System Password", ""),
+                    ("Server Credentials", ""),
+                    ("System Update", ""),
+                    ("Exit Configuration", "")]
+        m_height = 22
+        m_title = "%s Configuration Menu" % level.capitalize()
+    m_width = 40
+    m_rows = len(choices)+1
+    while True:
+        c_code, c_tag = d.menu(m_title, m_height, m_width, m_rows,
+            choices=choices)
+
+        # Bail here
+        if c_code == d.CANCEL:
+            return
+        if c_code == d.OK:
+            if c_tag == 'Exit Configuration':
+                # Have to call main_menu so we update title bar
+                main_menu()
+
+            if c_tag == 'Server':
+                msg = "Enter Server Name"
+                code, resp = d.inputbox(msg, 10, 50)
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled Changing Server Name", 10, 50)
+                if code == d.OK:
+                    update_db("configuration", "server", resp)
+                    msg = "Server Name changed to %s" % (resp)
+                    logging.info(msg)
+                    d.msgbox(msg, 10, 50)
+
+            if c_tag == 'Serial':
+                msg = "Enter Serial Number"
+                code, resp = d.inputbox(msg, 10, 50)
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled Changing Serial Number", 10, 50)
+                if code == d.OK:
+                    is_good = validate_serial(resp)
+                    if is_good:
+                        update_db("configuration", "serial", resp)
+                        msg = "Serial Number changed to %s" % (resp)
+                        logging.info(msg)
+                        d.msgbox(msg, 10, 50)
+                    else:
+                        msg = """ Invalid Serial Number! """
+                        d.msgbox(msg, 10, 40)
+            if c_tag == 'User Level':
+                logging.info("Attempting to change user level")
+                if level == 'Volunteer':
+                    code, pw = d.passwordbox('Enter Password',insecure=True)
+                    auth = auth_user(pw)
+                    if auth:
+                        logging.info("User Level change Password Succeeded")
+                    else:
+                        d.msgbox("Incorrect Password!")
+                        logging.info("Configuration Menu Password Failure")
+                        config_menu()
+                code, resp = d.menu("Select Type", 12, 40, 5,
+                    choices=[("Volunteer", ""),
+                            ("Professional", "")])
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled User Level", 10, 50)
+                if code == d.OK:
+                    update_db("configuration", "level", resp)
+
+            if c_tag == 'Recording Time':
+                msg = "Recording Length in Seconds"
+                code, resp = d.inputbox(msg, 10, 50)
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled Recording Seconds", 10, 50)
+                if code == d.OK:
+                    resp = int(resp)
+                    update_db("configuration", "record_time", resp)
+
+            if c_tag == 'Fixed/Live':
+                code, resp = d.menu("Select Type", 12, 40, 5,
+                    choices=[("Live", ""),
+                            ("Fixed", "")])
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled Sample Type", 10, 50)
+                if code == d.OK:
+                    update_db("configuration", "sample_type", resp)
+
+            if c_tag == 'Mode':
+                code, resp = d.menu("Select Mode", 12, 40, 5,
+                       choices=[("Normal", ""),
+                                ("Calibration", ""),
+                                ("Training", ""),
+                                ("Survey","")])
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled Mode Change", 10, 50)
+                if code == d.OK:
+                    update_db("configuration", "mode", resp)
+                    msg = "Mode changed to %s" % (resp)
+                    logging.info(msg)
+                    d.msgbox(msg, 10, 40)
+
+            if c_tag == 'Taxa':
+                code, resp = d.menu("Select Taxa", 12, 40, 4,
+                    choices=[("Karenia brevis", ""),
+                             ("Pyrodinium bahamense", ""),
+                             ("Alexandrium catenella", ""),
+                             ("Alexandrium monilatum", ""),
+                             ("Detritus", "")])
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled Taxa Change", 10, 50)
+                if code == d.OK:
+                    # 2022-07-13 robertdcurrier@gmail.com
+                    # Need to rename to single string naming convention
+                    # We will eventually want to have a table in config.db
+                    # with Menu name to internal name mappings...
+                    if resp == 'Alexandrium catenella':
+                        resp = 'alexandriumCatenella'
+                    if resp == 'Alexandrium monilatum':
+                        resp = 'alexandriumMonilatum'
+                    if resp == 'Karenia brevis':
+                        resp = 'kareniaBrevis'
+                    if resp == 'Pyrodinium bahamense':
+                        resp = 'pyrodiniumBahamense'
+
+                    update_db("configuration", "taxa", resp)
+                    msg = "Taxa changed to %s" % (resp)
+                    logging.info(msg)
+                    d.msgbox(msg, 10, 40)
+
+            if c_tag == 'System Password':
+                logging.info("Changing system password")
+                code, pw = d.passwordbox("Enter New Password", 10, 50,insecure=True)
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled System Password Change", 10, 50)
+                if code == d.OK:
+                    line = 'pi:%s' % pw
+                    pfile = open('passwd.txt','w')
+                    pfile.write(line)
+                    pfile.close()
+                    result = os.system("sudo chpasswd -c SHA512 < passwd.txt")
+                    if result == 0:
+                        logging.info("Succesfully changed system password")
+                        d.msgbox('Successfully changed password', 10, 50)
+                    else:
+                        logging.info("Failed to change system password")
+                        d.msgbox('Failed to change password', 10, 50)
+                    # remove file so no snooping
+                    os.remove('passwd.txt')
+
+            if c_tag == 'Server Credentials':
+                d.msgbox("Coming Soon...", 10, 50)
+            if c_tag == 'System Update':
+                code  = d.yesno("About to Update System! Are you SURE?", 10, 50)
+                if code == d.OK:
+                    results = system_update()
+                    if results:
+                        msg = "System Updated. Unit will reboot."
+                        logging.info(msg)
+                        d.msgbox(msg, 10, 50)
+                        config = get_sql_config('configuration')
+                        command = config["apt_get"]
+                        msg="system_update(): Applying %s" % command
+                        logging.info(msg)
+                        os.system(command)
+                        os.system("sudo reboot")
+                    else:
+                        msg = "System Update Failed"
+                        logging.info(msg)
+                        d.msgbox(msg, 10, 50)
+                        return
+                if code == d.CANCEL:
+                    d.msgbox("Cancelled System Update", 10, 50)
+
+                else:
+                    msg = "System Update Cancelled"
+                    logging.info(msg)
+                    d.msgbox("msg", 10, 50)
+
+            if c_tag == 'Camera':
+                camera_settings()
+
