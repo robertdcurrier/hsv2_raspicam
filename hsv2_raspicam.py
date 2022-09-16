@@ -1006,11 +1006,14 @@ def add_new_site():
     """
     return
 
-
 def get_states(cur):
     """
-    Fetch all unique states
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-16
+    Modified:   2022-09-16
+    Notes:      Fetch unique states
     """
+    logging.info('get_states()')
     choices = []
     states = []
     sql_text = """select distinct state from sites ORDER BY state ASC"""
@@ -1029,16 +1032,19 @@ def get_states(cur):
             choices.append("")
     (code, state) = d.menu("", 10, 30, 20,
             choices=[(choices)], title="Select State")
-    if code == 'ok':
-        return state
-    else:
-        lat_lon_menu()
+    if code == d.CANCEL:
+        state = get_states(cur)
+    return state
 
 
 def get_counties(cur, state):
     """
-    Fetch all unique counties
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-16
+    Modified:   2022-09-16
+    Notes:      Get unique counties
     """
+    logging.info('get_counties(%s)', state)
     choices = []
     counties = []
     sql_text = """select distinct county from sites where state = '%s'
@@ -1060,15 +1066,20 @@ def get_counties(cur, state):
             choices.append("")
     (code, county) = d.menu("", menu_h, 30, menu_l,
             choices=[(choices)], title="Select County")
-    if code == 'ok':
+    if code == d.CANCEL:
+        state = get_states(cur)
+        county = get_counties(cur, state)
         return county
     else:
-        lat_lon_menu()
+        return county
 
 
 def get_sites(cur, state, county):
     """
-    Fetch all sites in a county
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-16
+    Modified:   2022-09-16
+    Notes:      Had to break this out due to menu foppage
     """
     sites = []
     sql_text = ("""select * from sites where state='%s' and
@@ -1086,51 +1097,74 @@ def get_sites(cur, state, county):
     return sites
 
 
-
-def lat_lon_menu():
+def get_cur():
     """
-    2022-08-26
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-16
+    Modified:   2022-09-16
+    Notes:      Had to break this out due to menu foppage
     """
-    choices = []
     conn = create_connection('./config.db')
     cur = conn.cursor()
-    state = get_states(cur)
-    county = get_counties(cur, state)
+    return cur
+
+
+def get_sites(cur, state, county):
+    """
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-16
+    Modified:   2022-09-16
+    Notes:      Had to break this out due to menu foppage
+    """
+    logging.info('get_sites()')
     sql_text = """SELECT * FROM sites where state = '%s' and county = '%s'
     ORDER by SITE ASC""" % (state, county)
-    sites = cur.execute(sql_text)
     try:
        results = cur.execute(sql_text)
     except ValueError as e:
        logging.warning(e)
        sys.exit()
-    finally:
-        rows = cur.fetchall()
-        menu_l = len(rows)+2
-        menu_h = menu_l+5
-        # Populate the table
-        for row in rows:
-            (country, state, county, site, lat, lon) = row
-            choices.append(site)
-            choices.append("")
+    rows = cur.fetchall()
+    # Populate the table
+    sites = []
+    for row in rows:
+        (country, state, county, site, lat, lon) = row
+        sites.append(site)
+        sites.append("")
+    return sites
 
-    (code, site) = d.menu("",menu_h, 40, menu_l,
-            choices=[(choices)], title="Select Site",
-            help_tags=True)
-    if code == 'ok':
-        # query from sqlite instead of trying to deal with wonky
-        # dialog menu system -- should be much easier
-        (lat, lon) = get_coords(cur, country,state,county,site)
-        return(lat, lon, site)
-    else:
+
+def lat_lon_menu():
+    """
+    Author: robertdcurrier@gmail.com
+    Created: 2021-09-05
+    Modified: 2022-09-16
+    Notes:
+    """
+    country = "USA"
+    cur = get_cur()
+    state = get_states(cur)
+    county = get_counties(cur, state)
+    sites = get_sites(cur, state, county)
+    menu_l = int(len(sites)/2)+2
+    menu_h = menu_l+5
+
+    (code, site) = d.menu("", menu_h, 60, menu_l,
+                        choices=[(sites)], title="Select Site")
+    if code == d.CANCEL:
         lat_lon_menu()
+    else:
+        (lat, lon)  = get_coords(cur, country, state, county, site)
+        logging.debug('lat_lon_menu(): %s %s %s',site, lat, lon)
+        return(site, lat, lon)
 
 
 def get_coords(cur, country, state, county, site):
     """
-    Gets lat/lon from sites table. Dialog unable to return
-    both menu columns data so we have to do a lookup based
-    on site.
+    Author: robertdcurrier@gmail.com
+    Created: 2021-09-05
+    Modified: 2022-09-16
+    Notes:
     """
     sql_text = """select lat, lon from sites where country = '%s' and
     state = '%s' and county = '%s' and site = '%s'""" % (country, state,

@@ -22,33 +22,6 @@ import time
 from dialog import Dialog
 
 
-
-def main_menu():
-    """
-    Author:     robertdcurrier@gmail.com
-    Created:    2022-09-15
-    Modified:   2022-09-15
-    Notes:      Went with seperate Basic and Advanced config menus
-    """
-    code, tag = d.menu("Select an Option", 12, 35, 4,
-                        choices=[("Basic", ""),
-                                ("Advanced", "")])
-    if tag == 'Basic':
-        lat_lon_menu()
-    elif tag == 'Advanced':
-        code, pw = d.passwordbox('Enter Password',insecure=True)
-        auth = auth_user(pw)
-        if auth:
-            logging.info("Advanced Configuration Selected")
-            advanced_main_menu()
-        else:
-            d.msgbox("Incorrect Password!")
-            logging.info("Configuration Menu Password Failure")
-            main_menu()
-    if code == d.CANCEL:
-        main_menu()
-
-
 def create_connection(dbfile):
     """ create a database connection to the SQLite database """
     logging.debug("create_connection(): Opening connection to configuration DB")
@@ -87,6 +60,7 @@ def get_states(cur):
     """
     Fetch all unique states
     """
+    logging.info('get_states()')
     choices = []
     states = []
     sql_text = """select distinct state from sites ORDER BY state ASC"""
@@ -106,15 +80,15 @@ def get_states(cur):
     (code, state) = d.menu("", 10, 30, 20,
             choices=[(choices)], title="Select State")
     if code == d.CANCEL:
-        return('None')
-    else:
-        return(state)
+        state = get_states(cur)
+    return state
 
 
 def get_counties(cur, state):
     """
     Fetch all unique counties
     """
+    logging.info('get_counties(%s)', state)
     choices = []
     counties = []
     sql_text = """select distinct county from sites where state = '%s'
@@ -137,7 +111,9 @@ def get_counties(cur, state):
     (code, county) = d.menu("", menu_h, 30, menu_l,
             choices=[(choices)], title="Select County")
     if code == d.CANCEL:
-        return('None')
+        state = get_states(cur)
+        county = get_counties(cur, state)
+        return county
     else:
         return county
 
@@ -170,19 +146,14 @@ def get_cur():
     return cur
 
 
-def lat_lon_menu():
+def get_sites(cur, state, county):
     """
-    2022-08-26
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-16
+    Modified:   2022-09-16
+    Notes:      Had to break this out due to menu foppage
     """
-    cur = get_cur()
-    state = get_states(cur)
-    if state == 'None':
-        state = get_states(cur)
-
-    county = get_counties(cur, state)
-    if county == 'None':
-        county = get_counties(cur,state)
-
+    logging.info('get_sites()')
     sql_text = """SELECT * FROM sites where state = '%s' and county = '%s'
     ORDER by SITE ASC""" % (state, county)
     try:
@@ -191,19 +162,36 @@ def lat_lon_menu():
        logging.warning(e)
        sys.exit()
     rows = cur.fetchall()
-    menu_l = len(rows)+2
-    menu_h = menu_l+5
     # Populate the table
     sites = []
     for row in rows:
         (country, state, county, site, lat, lon) = row
         sites.append(site)
         sites.append("")
+    return sites
+
+
+def lat_lon_menu():
+    """
+    2022-08-26
+    """
+    country = "USA"
+    cur = get_cur()
+    state = get_states(cur)
+    county = get_counties(cur, state)
+    sites = get_sites(cur, state, county)
+    menu_l = int(len(sites)/2)+2
+    menu_h = menu_l+5
+
     (code, site) = d.menu("", menu_h, 60, menu_l,
                         choices=[(sites)], title="Select Site")
+    if code == d.CANCEL:
+        lat_lon_menu()
+    else:
+        (lat, lon)  = get_coords(cur, country, state, county, site)
+        logging.debug('lat_lon_menu(): %s %s %s',site, lat, lon)
+        return(site, lat, lon)
 
-    (lat, lon)  = get_coords(cur, country, state, county, site)
-    return(site, lat, lon)
 
 def get_coords(cur, country, state, county, site):
     """
@@ -234,5 +222,7 @@ if __name__ == '__main__':
         format='%(asctime)s %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
         level=logging.INFO)
-    (site, lat, lon) = lat_lon_menu()
-    logging.info('got %s with %04f %0.4f', site, lat, lon)
+    while True:
+        lat_lon_menu()
+        time.sleep(3)
+
