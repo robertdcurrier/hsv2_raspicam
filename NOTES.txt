@@ -1,0 +1,1 @@
+lat_lon_menu. Now works with one cancel.  Two cancels blows up in state or county select.  Also blows up if cancel in site select. 

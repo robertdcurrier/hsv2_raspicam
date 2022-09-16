@@ -18,12 +18,40 @@ import sys
 import logging
 import json
 import sqlite3
+import time
 from dialog import Dialog
+
+
+
+def main_menu():
+    """
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-15
+    Modified:   2022-09-15
+    Notes:      Went with seperate Basic and Advanced config menus
+    """
+    code, tag = d.menu("Select an Option", 12, 35, 4,
+                        choices=[("Basic", ""),
+                                ("Advanced", "")])
+    if tag == 'Basic':
+        lat_lon_menu()
+    elif tag == 'Advanced':
+        code, pw = d.passwordbox('Enter Password',insecure=True)
+        auth = auth_user(pw)
+        if auth:
+            logging.info("Advanced Configuration Selected")
+            advanced_main_menu()
+        else:
+            d.msgbox("Incorrect Password!")
+            logging.info("Configuration Menu Password Failure")
+            main_menu()
+    if code == d.CANCEL:
+        main_menu()
 
 
 def create_connection(dbfile):
     """ create a database connection to the SQLite database """
-    logging.info("create_connection(): Opening connection to configuration DB")
+    logging.debug("create_connection(): Opening connection to configuration DB")
     conn = None
     try:
         conn = sqlite3.connect(dbfile)
@@ -77,10 +105,10 @@ def get_states(cur):
             choices.append("")
     (code, state) = d.menu("", 10, 30, 20,
             choices=[(choices)], title="Select State")
-    if code == 'ok':
-        return state
+    if code == d.CANCEL:
+        return('None')
     else:
-        lat_lon_menu()
+        return(state)
 
 
 def get_counties(cur, state):
@@ -108,10 +136,10 @@ def get_counties(cur, state):
             choices.append("")
     (code, county) = d.menu("", menu_h, 30, menu_l,
             choices=[(choices)], title="Select County")
-    if code == 'ok':
-        return county
+    if code == d.CANCEL:
+        return('None')
     else:
-        lat_lon_menu()
+        return county
 
 
 def get_sites(cur, state, county):
@@ -134,45 +162,48 @@ def get_sites(cur, state, county):
     return sites
 
 
+def get_cur():
+    """
+    """
+    conn = create_connection('./config.db')
+    cur = conn.cursor()
+    return cur
+
 
 def lat_lon_menu():
     """
     2022-08-26
     """
-    choices = []
-    conn = create_connection('./config.db')
-    cur = conn.cursor()
+    cur = get_cur()
     state = get_states(cur)
+    if state == 'None':
+        state = get_states(cur)
+
     county = get_counties(cur, state)
+    if county == 'None':
+        county = get_counties(cur,state)
+
     sql_text = """SELECT * FROM sites where state = '%s' and county = '%s'
     ORDER by SITE ASC""" % (state, county)
-    sites = cur.execute(sql_text)
     try:
        results = cur.execute(sql_text)
     except ValueError as e:
        logging.warning(e)
        sys.exit()
-    finally:
-        rows = cur.fetchall()
-        menu_l = len(rows)+2
-        menu_h = menu_l+5
-        # Populate the table
-        for row in rows:
-            (country, state, county, site, lat, lon) = row
-            choices.append(site)
-            choices.append("")
+    rows = cur.fetchall()
+    menu_l = len(rows)+2
+    menu_h = menu_l+5
+    # Populate the table
+    sites = []
+    for row in rows:
+        (country, state, county, site, lat, lon) = row
+        sites.append(site)
+        sites.append("")
+    (code, site) = d.menu("", menu_h, 60, menu_l,
+                        choices=[(sites)], title="Select Site")
 
-    (code, site) = d.menu("",menu_h, 60, menu_l,
-            choices=[(choices)], title="Select Site",
-            help_tags=True)
-    if code == 'ok':
-        # query from sqlite instead of trying to deal with wonky
-        # dialog menu system -- should be much easier
-        (lat, lon) = get_coords(cur, country,state,county,site)
-        return(lat, lon, site)
-    else:
-        lat_lon_menu()
-
+    (lat, lon)  = get_coords(cur, country, state, county, site)
+    return(site, lat, lon)
 
 def get_coords(cur, country, state, county, site):
     """
@@ -198,10 +229,10 @@ END STATE COUNTY SITE MENU SYSTEM
 """
 
 if __name__ == '__main__':
+    d = Dialog(dialog="dialog")
     logging.basicConfig(
         format='%(asctime)s %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
         level=logging.INFO)
-    d = Dialog(dialog="dialog")
-    (lat, lon, site) = lat_lon_menu()
-    print(lat, lon, site)
+    (site, lat, lon) = lat_lon_menu()
+    logging.info('got %s with %04f %0.4f', site, lat, lon)
