@@ -502,7 +502,7 @@ def auth_user(pw):
         return False
 
 
-def mp4_pack():
+def mp4_pack(site, lat, lon):
     """
     Name: mp4_pack()
     Author: robertdcurrier@gmail.com
@@ -525,7 +525,6 @@ def mp4_pack():
 
 
     # 2022-09-15 dropped modes as just too much of a PITA
-    (lat, lon, site) = lat_lon_menu()
     site = site.replace(' ','-')
     outfile = ("/data/videos/raw/%s_%s_%d_%08.4f_%09.4f_%s_raw.mp4" %
                 (serial, taxa, epoch, lat, lon, site))
@@ -567,7 +566,7 @@ def capture_video():
     CAMERA.annotate_text = config["camera_warmup_annotate_text"]
     CAMERA.start_preview()
     # Allow camera to warm up
-    time.sleep(5)
+    time.sleep(3)
     # Clear the message
     CAMERA.annotate_text = ""
     CAMERA.start_recording(rawfile)
@@ -576,24 +575,24 @@ def capture_video():
     CAMERA.stop_preview()
     msg = 'capture_video(): Recording completed.'
     logging.info('capture_video(): Recording completed.')
+    (code, site, lat, lon) = lat_lon_menu()
+    while code == d.CANCEL:
+        (code, site, lat, lon) = lat_lon_menu()
     # Package into MP4 container
-    outfile = mp4_pack()
+    outfile = mp4_pack(site, lat, lon)
     # wait for mp4_pack() to finish
     while not os.path.exists(outfile):
         sleep(1)
 
-    mode = config["mode"].lower()
     INET_STATUS = connected_to_internet()
-    # For calibration we want to upload video, not process onboard
-    if mode == 'normal' or mode == 'calibration':
-        if not INET_STATUS:
-            msg = "No Internet. Can't Upload"
-            d.msgbox(msg, 5, 50)
-            main_menu()
-
-        upload_video(outfile)
-        #CODEMONKEY LIKE FRITOS
+    if not INET_STATUS:
+        msg = "No Internet. Can't Upload"
+        d.msgbox(msg, 5, 50)
         main_menu()
+
+    upload_video(outfile)
+    #CODEMONKEY LIKE FRITOS
+    main_menu()
 
 
 def upload_video(infile):
@@ -884,49 +883,6 @@ def create_connection(dbfile):
     return conn
 
 
-def get_results(anal_path):
-    """
-    Name: get_results()
-    Author: robertdcurrier@gmail.com
-    Created: 2021-07-19
-    Modified: 2022-02-03 got progress gauge working
-    Notes:
-    """
-    logging.info('get_results()')
-    config = get_sql_config('configuration')
-    userid = config['userid']
-    pw = config['pw']
-    server = config['server']
-    upload_timeout=int(config["upload_timeout"])
-    msg = "get_results(): Creating ssh client"
-    logging.warning(msg)
-    ssh = SSHClient()
-    start_time = int(time.time())
-    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    msg = 'get_results(): Set Missing Host Key okay...'
-    logging.info(msg)
-    ssh.connect(server,username=userid, password=pw)
-    msg = 'get_results(): Connected to server okay'
-    logging.info(msg)
-    start_time = int(time.time())
-    msg = 'get_results(): Using %s' % anal_path
-    logging.debug(msg)
-    (root_path, processed_image) = os.path.split(anal_path)
-    processed_image = processed_image.replace('raw','pro')
-    msg = 'root_path: %s, processed_image: %s' % (root_path, processed_image)
-    logging.debug(msg)
-    save_file = '/data/images/%s' % processed_image
-    msg = 'get_results(): save_file is %s' % save_file
-    logging.debug(msg)
-    try:
-        with SCPClient(ssh.get_transport(),progress=show_progress) as scp:
-            scp.get(anal_path, save_file)
-            return save_file
-    except:
-        # Keep trying until file appears
-            return False
-
-
 def get_sql_config(table):
     """
     Name:       get_sql_config
@@ -1006,12 +962,10 @@ def add_new_site():
     """
     return
 
+
 def get_states(cur):
     """
-    Author:     robertdcurrier@gmail.com
-    Created:    2022-09-16
-    Modified:   2022-09-16
-    Notes:      Fetch unique states
+    Fetch all unique states
     """
     logging.info('get_states()')
     choices = []
@@ -1032,19 +986,13 @@ def get_states(cur):
             choices.append("")
     (code, state) = d.menu("", 10, 30, 20,
             choices=[(choices)], title="Select State")
-    if code == d.CANCEL:
-        state = get_states(cur)
-    return state
+    return(code, state)
 
 
 def get_counties(cur, state):
     """
-    Author:     robertdcurrier@gmail.com
-    Created:    2022-09-16
-    Modified:   2022-09-16
-    Notes:      Get unique counties
+    Fetch all unique counties
     """
-    logging.info('get_counties(%s)', state)
     choices = []
     counties = []
     sql_text = """select distinct county from sites where state = '%s'
@@ -1054,55 +1002,22 @@ def get_counties(cur, state):
     except ValueError as e:
         logging.warning("get_counties(): %s", e)
         sys.exit()
-    finally:
-        rows = cur.fetchall()
-        menu_l = len(rows)+2
-        menu_h = menu_l+5
-        # Populate the table
-        for row in rows:
-            (county) = row
-            record = "%s" % (county[0])
-            choices.append(record)
-            choices.append("")
+    rows = cur.fetchall()
+    menu_l = len(rows)+2
+    menu_h = menu_l+5
+    # Populate the table
+    for row in rows:
+        (record) = row
+        record = "%s" % (record[0])
+        choices.append(record)
+        choices.append("")
     (code, county) = d.menu("", menu_h, 30, menu_l,
-            choices=[(choices)], title="Select County")
-    if code == d.CANCEL:
-        state = get_states(cur)
-        county = get_counties(cur, state)
-        return county
-    else:
-        return county
-
-
-def get_sites(cur, state, county):
-    """
-    Author:     robertdcurrier@gmail.com
-    Created:    2022-09-16
-    Modified:   2022-09-16
-    Notes:      Had to break this out due to menu foppage
-    """
-    sites = []
-    sql_text = ("""select * from sites where state='%s' and
-            county='%s' ORDER BY site ASC""" %
-                (state, county))
-    try:
-       results = cur.execute(sql_text)
-    except ValueError as e:
-       logging.warning("get_sites() %s", e)
-       sys.exit()
-    finally:
-        rows = cur.fetchall()
-        for row in rows:
-            sites.append(row)
-    return sites
+        choices=[(choices)], title="Select County")
+    return(code, county)
 
 
 def get_cur():
     """
-    Author:     robertdcurrier@gmail.com
-    Created:    2022-09-16
-    Modified:   2022-09-16
-    Notes:      Had to break this out due to menu foppage
     """
     conn = create_connection('./config.db')
     cur = conn.cursor()
@@ -1113,10 +1028,10 @@ def get_sites(cur, state, county):
     """
     Author:     robertdcurrier@gmail.com
     Created:    2022-09-16
-    Modified:   2022-09-16
-    Notes:      Had to break this out due to menu foppage
+    Modified:   2022-09-19
+    Notes:      Had to break this out due to menu foppage. Added menu
+    here vs lat_lon_menu so we could return code and site.
     """
-    logging.info('get_sites()')
     sql_text = """SELECT * FROM sites where state = '%s' and county = '%s'
     ORDER by SITE ASC""" % (state, county)
     try:
@@ -1131,40 +1046,43 @@ def get_sites(cur, state, county):
         (country, state, county, site, lat, lon) = row
         sites.append(site)
         sites.append("")
-    return sites
+
+    menu_l = int(len(sites)/2)+2
+    menu_h = menu_l+5
+    (code, site) = d.menu("", menu_h, 60, menu_l,
+                        choices=[(sites)], title="Select Site")
+    return(code, site)
 
 
 def lat_lon_menu():
     """
-    Author: robertdcurrier@gmail.com
-    Created: 2021-09-05
-    Modified: 2022-09-16
-    Notes:
+    Author:     robertdcurrier@gmail.com
+    Created:    2022-09-16
+    Modified:   2022-09-19
+    Notes:      Changed to return on cancel. Recursive callbacks were
+    totally whacking the returned values. Moved the 'while cancel' loop
+    to main menu.
     """
     country = "USA"
     cur = get_cur()
-    state = get_states(cur)
-    county = get_counties(cur, state)
-    sites = get_sites(cur, state, county)
-    menu_l = int(len(sites)/2)+2
-    menu_h = menu_l+5
-
-    (code, site) = d.menu("", menu_h, 60, menu_l,
-                        choices=[(sites)], title="Select Site")
-    if code == d.CANCEL:
-        lat_lon_menu()
-    else:
-        (lat, lon)  = get_coords(cur, country, state, county, site)
-        logging.debug('lat_lon_menu(): %s %s %s',site, lat, lon)
-        return(site, lat, lon)
+    (code, state) = get_states(cur)
+    if code == 'cancel':
+        return(code,'None',0,0)
+    (code, county) = get_counties(cur, state)
+    if code == 'cancel':
+        return(code,'None',0,0)
+    (code, site) = get_sites(cur, state, county)
+    if code == 'cancel':
+        return(code,'None',0,0)
+    (lat, lon) = get_coords(cur, country, state, county, site)
+    return(code, site, lat, lon)
 
 
 def get_coords(cur, country, state, county, site):
     """
-    Author: robertdcurrier@gmail.com
-    Created: 2021-09-05
-    Modified: 2022-09-16
-    Notes:
+    Gets lat/lon from sites table. Dialog unable to return
+    both menu columns data so we have to do a lookup based
+    on site.
     """
     sql_text = """select lat, lon from sites where country = '%s' and
     state = '%s' and county = '%s' and site = '%s'""" % (country, state,
